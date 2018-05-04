@@ -25,6 +25,15 @@ public class Main {
     static PreparedStatement listallProdsOffline;
     static PreparedStatement checkPhysicalOneQuantity;
     static PreparedStatement checkPhysicalTwoQuantity;
+    static PreparedStatement cash;
+    static PreparedStatement credit;
+    static PreparedStatement debit;
+    static PreparedStatement updateOnlineInventory;
+    static PreparedStatement updatePhysicalOne;
+    static PreparedStatement updatePhysicalTwo;
+
+
+
     static PreparedStatement searchProd;
     static PreparedStatement payMethod;
     static PreparedStatement purchase;
@@ -32,7 +41,8 @@ public class Main {
     static PreparedStatement physical;
     static PreparedStatement ship;
     static PreparedStatement takeOut;
-    static PreparedStatement confirm;
+    static PreparedStatement checkEmtpyCart;
+
 
     public static void main(String[] args){
         int customerId=-1;
@@ -68,11 +78,17 @@ public class Main {
                 checkPhysicalOneQuantity=con.prepareStatement("SELECT INVENTORY FROM STORE_INVENTORY WHERE STORE_ID=2 AND PROD_ID=?");
                 checkPhysicalTwoQuantity=con.prepareStatement("SELECT INVENTORY FROM STORE_INVENTORY WHERE STORE_ID=3 AND PROD_ID=?");
                 listAllPhysicalStores=con.prepareStatement("SELECT * FROM OFFLINE_WAREHOUSE");
-
                 addToCart=con.prepareStatement("INSERT INTO TRANSAC_CONTAIN VALUES(?,?,?)");
+                cash=con.prepareStatement("INSERT INTO CASH VALUES(?,?)");
+                credit=con.prepareStatement("INSERT INTO credit VALUES(?,?)");
+                debit=con.prepareStatement("INSERT INTO debit VALUES(?,?)");
                 getProdName=con.prepareStatement("SELECT PROD_NAME FROM PRODUCTS WHERE PROD_ID=?");
                 listCart = con.prepareStatement("SELECT PROD_NAME, QUANTITY FROM TRANSAC_CONTAIN NATURAL JOIN PRODUCTS WHERE TRANSAC_ID=?");
-                //getCusID=con.prepareStatement("SELECT ")
+                updateOnlineInventory=con.prepareStatement("update STORE_INVENTORY SET INVENTORY = ? where STORE_ID=1 and PROD_ID=? ");
+                updatePhysicalOne=con.prepareStatement("update STORE_INVENTORY SET INVENTORY = ? where STORE_ID=2 and PROD_ID=? ");
+                updatePhysicalTwo=con.prepareStatement("update STORE_INVENTORY SET INVENTORY = ? where STORE_ID=3 and PROD_ID=? ");
+                checkEmtpyCart=con.prepareStatement("SELECT QUANTITY FROM TRANSAC_CONTAIN WHERE TRANSAC_ID=? ");
+
                 break;
             }catch (Exception e) {System.out.println("Wrong username/password");
             }
@@ -371,7 +387,7 @@ public class Main {
                                 prodname=res.getString(1);
                                 if(inventory ==0)
                                     System.out.println("This product is not available for ship. Please check offline warehouse for take out");
-                                if (inventory < amount) {
+                                else if (inventory < amount) {
                                     System.out.println("Sorry! We only have " + inventory + " of " + prodname +" left! Please buy a different product or enter a smaller amount");
                                 } else {
                                     try {
@@ -387,6 +403,12 @@ public class Main {
                                     } catch (Exception e) {
                                         System.out.println("Error adding to cart");
                                     }
+                                    try{
+                                        updateOnlineInventory.setInt(1,inventory-amount);
+                                        updateOnlineInventory.setInt(2,prodId);
+                                    }catch(Exception e){
+                                        System.out.println("Error updating online inventory");
+                                    }
                                 }
                             }
                         } catch (Exception e) {
@@ -396,9 +418,21 @@ public class Main {
                         System.out.println("Error checking inventory for ship");
                     }
 
+                    System.out.println("Please review your cart");
+                    try {
+                        listCart.setInt(1,transactionId);
+                        ResultSet rs = listCart.executeQuery();
+                        System.out.format("%30s%10s\n", "Product Name", "Quantity");
+                        while (rs.next()) {
+                            System.out.format("%30s%10d\n", rs.getString("PROD_NAME"), rs.getInt("QUANTITY"));
+                        }
+                    } catch (Exception e) {
+                        System.out.println("Error listing products");
+                    }
+
                     System.out.println("Would you like to add more items to your cart?");
                     System.out.println("0: YES");
-                    System.out.println("1: NO. Take me to checkout window");
+                    System.out.println("1: NO. Check out");
                     int checkout;
                     while (true) {
                         checkout = sc.nextInt();
@@ -410,17 +444,10 @@ public class Main {
                     }
                     if (checkout == 1)
                         option = 0;
+
                 }
-                System.out.println("Please review your cart");
-                try {
-                    ResultSet rs = listAllDrugs.executeQuery();
-                    System.out.format("%7s%60s\n", "Products ID", "Products Name");
-                    while (rs.next()) {
-                        System.out.format("%7d%60s\n", rs.getInt("PROD_ID"), rs.getString("PROD_NAME"));
-                    }
-                } catch (Exception e) {
-                    System.out.println("Error listing products");
-                }
+
+
 
             }
             else if(ship==1) {
@@ -452,14 +479,14 @@ public class Main {
                             if (result.next())
                                 inventory = result.getInt(1);
                             try {
-                                getProdName.setInt(1, prodId);
+                                getProdName.setInt(1,prodId);
                                 ResultSet res = getProdName.executeQuery();
                                 if (res.next()) {
-                                    prodname = res.getString(1);
-                                    if (inventory == 0)
-                                        System.out.println("This product is not available at this warehouse");
-                                    if (inventory < amount) {
-                                        System.out.println("Sorry! We only have " + inventory + " of " + prodname + " left! Please buy a different product or enter a smaller amount");
+                                    prodname=res.getString(1);
+                                    if(inventory ==0)
+                                        System.out.println("This product is not available at this store");
+                                    else if (inventory < amount) {
+                                        System.out.println("Sorry! We only have " + inventory + " of " + prodname +" left! Please buy a different product or enter a smaller amount");
                                     } else {
                                         try {
                                             addToCart.setInt(1, transactionId);
@@ -474,18 +501,36 @@ public class Main {
                                         } catch (Exception e) {
                                             System.out.println("Error adding to cart");
                                         }
+                                        try{
+                                            updatePhysicalOne.setInt(1,inventory-amount);
+                                            updatePhysicalOne.setInt(2,prodId);
+                                        }catch(Exception e){
+                                            System.out.println("Error updating warehouse inventory");
+                                        }
                                     }
                                 }
                             } catch (Exception e) {
                                 System.out.println("Error getting product name");
                             }
+                        }catch (Exception e) {
+                            System.out.println("Error checking inventory for store");
+                        }
+
+                        System.out.println("Please review your cart");
+                        try {
+                            listCart.setInt(1,transactionId);
+                            ResultSet rs = listCart.executeQuery();
+                            System.out.format("%30s%10s\n", "Product Name", "Quantity");
+                            while (rs.next()) {
+                                System.out.format("%30s%10d\n", rs.getString("PROD_NAME"), rs.getInt("QUANTITY"));
+                            }
                         } catch (Exception e) {
-                            System.out.println("Error checking inventory for ship");
+                            System.out.println("Error listing products");
                         }
 
                         System.out.println("Would you like to add more items to your cart?");
                         System.out.println("0: YES");
-                        System.out.println("1: NO. Take me to checkout window");
+                        System.out.println("1: NO. Check out");
                         int checkout;
                         while (true) {
                             checkout = sc.nextInt();
@@ -495,17 +540,172 @@ public class Main {
                                 break;
                             }
                         }
-                        if (checkout == 1)
+                        if (checkout == 1) {
                             option = 0;
+                        }
+
+
                     }
+
+                }
+                else if(house==1){
+                    System.out.println("Redirecting to Store 3 inventory");
+                    while (option == 1) {
+                        String prodname = null;
+                        int inventory = 0;
+                        System.out.println("Please enter the ID of the product you want to purchase");
+                        int prodId = sc.nextInt();
+                        System.out.println("Please enter the amount you want to buy");
+                        int amount = sc.nextInt();
+                        /*check if there's enough inventory*/
+                        try {
+                            checkPhysicalTwoQuantity.setInt(1, prodId);
+                            ResultSet result = checkPhysicalTwoQuantity.executeQuery();
+                            if (result.next())
+                                inventory = result.getInt(1);
+                            try {
+                                getProdName.setInt(1,prodId);
+                                ResultSet res = getProdName.executeQuery();
+                                if (res.next()) {
+                                    prodname=res.getString(1);
+                                    if(inventory ==0)
+                                        System.out.println("This product is not available at this store");
+                                    else if (inventory < amount) {
+                                        System.out.println("Sorry! We only have " + inventory + " of " + prodname +" left! Please buy a different product or enter a smaller amount");
+                                    } else {
+                                        try {
+                                            addToCart.setInt(1, transactionId);
+                                            addToCart.setInt(2, prodId);
+                                            addToCart.setInt(3, amount);
+                                            int rs = addToCart.executeUpdate();
+                                            if (rs != 0) {
+                                                System.out.println("You have added " + amount + " of " + prodname + " to your cart");
+                                            }
+
+
+                                        } catch (Exception e) {
+                                            System.out.println("Error adding to cart");
+                                        }
+                                        try{
+                                            updatePhysicalTwo.setInt(1,inventory-amount);
+                                            updatePhysicalTwo.setInt(2,prodId);
+                                        }catch(Exception e){
+                                            System.out.println("Error updating warehouse inventory");
+                                        }
+                                    }
+                                }
+                            } catch (Exception e) {
+                                System.out.println("Error getting product name");
+                            }
+                        }catch (Exception e) {
+                            System.out.println("Error checking inventory for store");
+                        }
+
+                        System.out.println("Please review your cart");
+                        try {
+                            listCart.setInt(1,transactionId);
+                            ResultSet rs = listCart.executeQuery();
+                            System.out.format("%30s%10s\n", "Product Name", "Quantity");
+                            while (rs.next()) {
+                                System.out.format("%30s%10d\n", rs.getString("PROD_NAME"), rs.getInt("QUANTITY"));
+                            }
+                        } catch (Exception e) {
+                            System.out.println("Error listing products");
+                        }
+
+                        System.out.println("Would you like to add more items to your cart?");
+                        System.out.println("0: YES");
+                        System.out.println("1: NO. Check out");
+                        int checkout;
+                        while (true) {
+                            checkout = sc.nextInt();
+                            if (checkout != 0 && checkout != 1) {
+                                System.out.println("You can only enter 0 or 1");
+                            } else {
+                                break;
+                            }
+                        }
+                        if (checkout == 1) {
+                            option = 0;
+                        }
+
+
+                    }
+
 
                 }
 
 
             }
 
-
-
+            /*check out*/
+            /*if empty cart then no need to check out, else enter payment method*/
+            try{
+                checkEmtpyCart.setInt(1, transactionId);
+                ResultSet res =checkEmtpyCart.executeQuery();
+                int empty=0;
+                if(res.next())
+                    empty = res.getInt("Quantity");
+                if(empty==0){
+                    System.out.println("Thank you for your interest! Come back next time");
+                }
+                else{
+                    System.out.println("Choose payment option");
+                    System.out.println("0: Cash");
+                    System.out.println("1: Credit Card");
+                    System.out.println("2: Debit Card");
+                    int payment;
+                    while (true) {
+                        payment = sc.nextInt();
+                        if (payment != 0 && payment != 1 && payment != 2) {
+                            System.out.println("You can only enter 0,1 or 2");
+                        } else {
+                            break;
+                        }
+                    }
+                    if(payment==0){
+                        try{
+                            cash.setInt(1,customerId);
+                            cash.setInt(2,customerId);
+                            int rs = cash.executeUpdate();
+                            if(rs!=0) {
+                                System.out.println("Please pay when the shipment arrives");
+                            }
+                        }catch(Exception e){
+                            System.out.println("Error registering cash");
+                        }
+                    }
+                    else if(payment==1){
+                        try{
+                            System.out.println("Please enter your card numbers without space");
+                            long cred=sc.nextLong();
+                            credit.setInt(1,customerId);
+                            credit.setLong(2,cred);
+                            int rs = credit.executeUpdate();
+                            if(rs!=0) {
+                                System.out.println("Your card is registered");
+                            }
+                        }catch(Exception e){
+                            System.out.println("Error registering credit");
+                        }
+                    }
+                    else{
+                        try{
+                            System.out.println("Please enter your card numbers without space");
+                            long deb=sc.nextLong();
+                            debit.setInt(1,customerId);
+                            debit.setLong(2,deb);
+                            int rs = debit.executeUpdate();
+                            if(rs!=0) {
+                                System.out.println("Your card is registered");
+                            }
+                        }catch(Exception e){
+                            System.out.println("Error registering debit");
+                        }
+                    }
+                    System.out.println("Your order has been placed");
+                }
+            } catch(Exception e){ e.printStackTrace();}
 
 
         }
